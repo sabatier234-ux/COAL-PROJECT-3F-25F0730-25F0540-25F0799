@@ -35,9 +35,9 @@ pre code{padding:0;background:none}
 <h2>1. Team</h2>
 <div class="wrap"><table>
 <tr><th>Name</th><th>Roll number</th><th>GitHub account</th><th>Modules built</th></tr>
-<tr><td><span class="ph">SABA</span></td><td><span class="ph">[25F-0730]</span></td><td><span class="ph"></span></td><td><span class="ph">[1, 2, 3 ,8,9]</span></td></tr>
-<tr><td><span class="ph">MEHAK FATIMA</span></td><td><span class="ph">[25F-0799]</span></td><td><span class="ph"></span></td><td><span class="ph">[4, 5,10,11,12]</span></td></tr>
-<tr><td><span class="ph">KHADIJA ASHFAQ</span></td><td><span class="ph">[25F-0540]</span></td><td><span class="ph"></span></td><td><span class="ph">[6, 7 ,13,14,15]</span></td></tr>
+<tr><td><span class="ph">SABA</span></td><td><span class="ph">[25F-0730]</span></td><td><span class="ph">[1, 2, 3 ,8,9]</span></td></tr>
+<tr><td><span class="ph">MEHAK FATIMA</span></td><td><span class="ph">[25F-0799]</span></td><td><span class="ph">[4, 5,10,11,12]</span></td></tr>
+<tr><td><span class="ph">KHADIJA ASHFAQ</span></td><td><span class="ph">[25F-0540]</span></td><td></td><span class="ph">[6, 7 ,13,14,15]</span></td></tr>
 </table></div>
 
 
