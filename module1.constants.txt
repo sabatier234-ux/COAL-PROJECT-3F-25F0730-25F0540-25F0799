@@ -1,0 +1,79 @@
+VIDEO_SEG   equ 0A000h
+SCREEN_W    equ 320
+SCREEN_H    equ 200
+MAP_W       equ 60
+MAP_H       equ 12
+MAP_SIZE    equ MAP_W*MAP_H
+MAX_CAM     equ (MAP_W*16)-320      
+CHARSET_LEN equ 13
+SPR_NCHARS  equ 9
+POLE_X      equ 57*16              
+BASE_FEET   equ 144                
+
+
+COL_SKY     equ 9
+COL_BLACK   equ 16
+COL_BLUE    equ 1
+COL_GREEN   equ 2
+COL_RED     equ 4
+COL_BROWN   equ 6
+COL_LGRAY   equ 7
+COL_DGRAY   equ 8
+COL_LGREEN  equ 10
+COL_YELLOW  equ 14
+COL_WHITE   equ 15
+
+
+F_MIRROR    equ 1
+F_STRETCH   equ 2
+
+
+SC_ESC      equ 01h
+SC_T        equ 14h                
+SC_P        equ 19h
+SC_ENTER    equ 1Ch
+SC_LSHIFT   equ 2Ah
+SC_C        equ 2Eh                 
+SC_SPACE    equ 39h
+SC_UP       equ 48h
+SC_LEFT     equ 4Bh
+SC_RIGHT    equ 4Dh
+SC_DOWN     equ 50h
+
+TICKS_PER_SEC   equ 18              
+LEVEL_TIME      equ 300
+INVULN_T        equ 36             
+
+
+ACC         equ 0035h
+BRAKE       equ 0069h
+FRIC        equ 001Ah
+WALK_MAX    equ 0279h
+RUN_MAX     equ 041Fh
+GRAV        equ 00ADh
+JUMP_V      equ 0F6EEh
+CUT_V       equ 0FCB3h
+MAXFALL     equ 0697h
+BOUNCE_V    equ 0FB0Eh
+BOUNCE_HI   equ 0FA3Bh
+
+ST_TITLE    equ 0
+ST_PLAYING  equ 1
+ST_PAUSED   equ 2
+ST_DYING    equ 3
+ST_LIFELOST equ 4
+ST_WIN      equ 5
+ST_COMPLETE equ 6
+ST_GAMEOVER equ 7
+ST_EXIT     equ 8
+
+
+ENT_MAX     equ 10
+ENT_SIZE    equ 16
+E_TYPE      equ 0                   
+E_STATE     equ 1                   
+E_X         equ 2                  
+E_Y         equ 4                   
+E_DIR       equ 6                   
+E_FRAC      equ 7                  
+E_TMR       equ 8                  
