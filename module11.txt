@@ -1,0 +1,375 @@
+; module11_enemies.inc - Module 11: enemies and shells
+; Procedures: EntStep, EntTurnOthers, ShellKill, UpdateEnemies,
+;             Bounce, StompScore, KickShell, HurtMario, ResolveEntities
+
+; EntStep : in SI = entity offset, AX = speed (8.8), BL = 1 -> turn at ledges
+; Moves in the facing direction, bounces off walls, falls with gravity.
+EntStep:
+        push ax
+        push cx
+        push dx
+        cmp byte [ents+si+E_DIR], 0
+        jne near .mv
+        neg ax
+.mv:    mov dl, [ents+si+E_FRAC]
+        add dl, al
+        mov [ents+si+E_FRAC], dl
+        mov al, ah
+        cbw
+        adc [ents+si+E_X], ax
+        mov cx, [ents+si+E_X]
+        cmp byte [ents+si+E_DIR], 0
+        jne near .rt
+        push cx                     
+        mov ax, [ents+si+E_Y]
+        sub ax, 8
+        push ax
+        call IsSolid
+        test ax, ax
+        jz near .edge
+        mov ax, [ents+si+E_X]
+        shr ax, 4
+        inc ax
+        shl ax, 4
+        mov [ents+si+E_X], ax
+        mov byte [ents+si+E_FRAC], 0
+        mov byte [ents+si+E_DIR], 1
+        jmp near .fall
+.rt:    add cx, 15
+        push cx
+        mov ax, [ents+si+E_Y]
+        sub ax, 8
+        push ax
+        call IsSolid
+        test ax, ax
+        jz near .edge
+        mov ax, cx
+        shr ax, 4
+        shl ax, 4
+        sub ax, 16
+        mov [ents+si+E_X], ax
+        mov byte [ents+si+E_FRAC], 0
+        mov byte [ents+si+E_DIR], 0
+        jmp near .fall
+.edge:  test bl, bl
+        jz near .fall
+        mov cx, [ents+si+E_X]       
+        cmp byte [ents+si+E_DIR], 0
+        je near .e1
+        add cx, 15
+.e1:    push cx
+        push word [ents+si+E_Y]
+        call IsSolid
+        test ax, ax
+        jnz near .fall
+        xor byte [ents+si+E_DIR], 1
+.fall:  mov cx, [ents+si+E_X]
+        add cx, 8
+        push cx
+        push word [ents+si+E_Y]
+        call IsSolid
+        test ax, ax
+        jnz near .o
+        add word [ents+si+E_Y], 3   
+.o:     pop dx
+        pop cx
+        pop ax
+        ret
+
+; EntTurnOthers : SI = walking enemy; turn away from any overlapping walking enemy
+EntTurnOthers:
+        push ax
+        push bx
+        push cx
+        xor bx, bx
+        mov cx, ENT_MAX
+.l:     cmp bx, si
+        je near .n
+        mov al, [ents+bx+E_TYPE]
+        cmp al, 1
+        je near .chk
+        cmp al, 2
+        jne near .n
+.chk:   cmp byte [ents+bx+E_STATE], 1
+        jne near .n
+        mov ax, [ents+si+E_Y]
+        sub ax, [ents+bx+E_Y]
+        cmp ax, 8
+        jge near .n
+        cmp ax, -8
+        jle near .n
+        mov ax, [ents+si+E_X]
+        sub ax, [ents+bx+E_X]
+        cmp ax, 16
+        jge near .n
+        cmp ax, -16
+        jle near .n
+        test ax, ax
+        js near .left
+        mov byte [ents+si+E_DIR], 1
+        jmp near .n
+.left:  mov byte [ents+si+E_DIR], 0
+.n:     add bx, ENT_SIZE
+        dec cx
+        jnz near .l
+        pop cx
+        pop bx
+        pop ax
+        ret
+
+; ShellKill : SI = sliding shell; removes touched Goombas/Koopas, +500 each
+ShellKill:
+        push ax
+        push bx
+        push cx
+        xor bx, bx
+        mov cx, ENT_MAX
+.l:     cmp bx, si
+        je near .n
+        mov al, [ents+bx+E_TYPE]
+        cmp al, 1
+        je near .chk
+        cmp al, 2
+        jne near .n
+.chk:   mov ax, [ents+si+E_X]
+        sub ax, [ents+bx+E_X]
+        jns near .p1
+        neg ax
+.p1:    cmp ax, 14
+        jge near .n
+        mov ax, [ents+si+E_Y]
+        sub ax, [ents+bx+E_Y]
+        jns near .p2
+        neg ax
+.p2:    cmp ax, 12
+        jge near .n
+        mov byte [ents+bx+E_TYPE], 0
+        push word 500
+        call AddScore
+.n:     add bx, ENT_SIZE
+        dec cx
+        jnz near .l
+        pop cx
+        pop bx
+        pop ax
+        ret
+
+UpdateEnemies:
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        xor si, si
+        mov cx, ENT_MAX
+.l:     mov al, [ents+si+E_TYPE]
+        test al, al
+        jz near .next
+        mov ax, [ents+si+E_X]       ; far left of the camera, or below the map: remove
+        sub ax, [camera_x]
+        cmp ax, -32
+        jl near .kill
+        cmp word [ents+si+E_Y], 220
+        jg near .kill
+        cmp byte [ents+si+E_TYPE], 3
+        je near .mush
+        mov al, [ents+si+E_STATE]
+        cmp al, 0
+        je near .wait
+        cmp al, 1
+        je near .walk
+        cmp al, 2
+        je near .flat
+        cmp al, 3
+        je near .stat
+        jmp near .slide
+.wait:  mov ax, [ents+si+E_X]       ; wakes up within one tile of the screen
+        sub ax, [camera_x]
+        cmp ax, 336
+        jge near .next
+        mov byte [ents+si+E_STATE], 1
+        jmp near .next
+.walk:  mov ax, 00D2h               ; Goomba 0.82 px/frame
+        xor bl, bl
+        cmp byte [ents+si+E_TYPE], 1
+        je near .go
+        mov ax, 013Ch               ; Koopa 1.24 px/frame, turns at ledges
+        mov bl, 1
+.go:    call EntStep
+        call EntTurnOthers
+        jmp near .next
+.mush:  mov ax, 01A6h               ; mushroom 1.65 px/frame
+        xor bl, bl
+        call EntStep
+        jmp near .next
+.flat:  dec byte [ents+si+E_TMR]
+        jnz near .next
+        mov byte [ents+si+E_TYPE], 0
+        jmp near .next
+.stat:  cmp byte [ents+si+E_TMR], 0
+        je near .next
+        dec byte [ents+si+E_TMR]
+        jmp near .next
+.slide: cmp byte [ents+si+E_TMR], 0
+        je near .sm
+        dec byte [ents+si+E_TMR]
+.sm:    mov ax, 04F0h               ; sliding shell 4.9 px/frame
+        xor bl, bl
+        call EntStep
+        call ShellKill
+        jmp near .next
+.kill:  mov byte [ents+si+E_TYPE], 0
+.next:  add si, ENT_SIZE
+        dec cx
+        jnz near .l
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        ret
+
+Bounce:
+        mov word [vy], BOUNCE_V
+        cmp byte [keys+SC_SPACE], 0
+        je near .o
+        mov word [vy], BOUNCE_HI
+.o:     mov byte [on_ground], 0
+        ret
+
+StompScore:                         
+        push ax
+        push bx
+        xor bh, bh
+        mov bl, [chain]
+        cmp bl, 10
+        jae near .life
+        shl bx, 1
+        push word [chain_pts+bx]
+        call AddScore
+        jmp near .inc
+.life:  call AddLife
+.inc:   cmp byte [chain], 250
+        jae near .o
+        inc byte [chain]
+.o:     pop bx
+        pop ax
+        ret
+
+KickShell:                          
+        push ax
+        push bx
+        mov ax, [mx_int]
+        add ax, 8
+        mov bx, [ents+si+E_X]
+        add bx, 8
+        cmp ax, bx
+        jl near .right
+        mov byte [ents+si+E_DIR], 0
+        jmp near .go
+.right: mov byte [ents+si+E_DIR], 1
+.go:    mov byte [ents+si+E_STATE], 4
+        mov byte [ents+si+E_TMR], 5     
+        push word 400
+        call AddScore
+        pop bx
+        pop ax
+        ret
+
+HurtMario:
+        cmp word [invuln], 0
+        jne near .o
+        cmp byte [form], 0
+        je near .die
+        mov byte [form], 0
+        mov byte [hp], 1
+        mov word [invuln], INVULN_T
+.o:     ret
+.die:   mov byte [die_pit], 0
+        call StartDeath
+        ret
+
+ResolveEntities:
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        xor si, si
+        mov di, ENT_MAX
+.l:     mov al, [ents+si+E_TYPE]
+        test al, al
+        jz near .n
+        cmp al, 3
+        je near .mushroom
+        mov al, [ents+si+E_STATE]
+        cmp al, 0
+        je near .n
+        cmp al, 2
+        je near .n
+        call OverlapEnt
+        test ax, ax
+        jz near .n
+        mov al, [ents+si+E_STATE]
+        cmp al, 3
+        je near .statshell
+        cmp al, 4
+        je near .slideshell
+        call IsStomp                
+        test ax, ax
+        jz near .hurt
+        cmp byte [ents+si+E_TYPE], 1
+        jne near .koopa
+        mov byte [ents+si+E_STATE], 2
+        mov byte [ents+si+E_TMR], 18
+        jmp near .stomped
+.koopa: mov byte [ents+si+E_STATE], 3
+        mov byte [ents+si+E_TMR], 5
+.stomped:
+        call StompScore
+        call Bounce
+        jmp near .n
+.hurt:  call HurtMario
+        jmp near .n
+.statshell:
+        cmp byte [ents+si+E_TMR], 0
+        jne near .n
+        call IsStomp               
+        push ax
+        call KickShell
+        pop ax
+        test ax, ax
+        jz near .n
+        call Bounce
+        jmp near .n
+.slideshell:
+        cmp byte [ents+si+E_TMR], 0
+        jne near .n
+        call IsStomp
+        test ax, ax
+        jz near .hurt
+        mov byte [ents+si+E_STATE], 3
+        mov byte [ents+si+E_TMR], 5
+        jmp near .stomped
+.mushroom:
+        call OverlapEnt
+        test ax, ax
+        jz near .n
+        mov byte [ents+si+E_TYPE], 0
+        push word 1000
+        call AddScore
+        cmp byte [form], 0
+        jne near .n
+        mov byte [form], 1         
+        mov byte [hp], 2
+.n:     add si, ENT_SIZE
+        dec di
+        jnz near .l
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        ret
