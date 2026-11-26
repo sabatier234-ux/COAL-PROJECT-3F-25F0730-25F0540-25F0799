@@ -1,0 +1,139 @@
+; module12_blocks.inc - Module 12: blocks, coins and power-ups
+; Procedures: TriggerBlock, SpawnMushroom, TouchTiles
+
+; TriggerBlock(px, py) : head hit on the tile at this pixel position
+TriggerBlock:
+        push bp
+        mov bp, sp
+        push ax
+        push bx
+        push cx
+        mov ax, [bp+6]
+        shr ax, 4
+        cmp ax, MAP_W
+        jae near .o
+        mov bx, [bp+4]
+        shr bx, 4
+        cmp bx, MAP_H
+        jae near .o
+        mov cx, bx
+        shl bx, 6
+        shl cx, 2
+        sub bx, cx
+        add bx, ax
+        mov cl, [level_work+bx]
+        cmp cl, 2
+        je near .brick
+        cmp cl, 3
+        je near .coin
+        cmp cl, 4
+        je near .mush
+        jmp near .o
+.brick: cmp byte [form], 0          
+        je near .o
+        mov byte [level_work+bx], 0
+        push word 50
+        call AddScore
+        jmp near .o
+.coin:  mov byte [level_work+bx], 5
+        call CollectCoin
+        jmp near .o
+.mush:  mov byte [level_work+bx], 5
+        mov ax, [bp+6]
+        shr ax, 4
+        push ax
+        mov ax, [bp+4]
+        shr ax, 4
+        push ax
+        call SpawnMushroom
+.o:     pop cx
+        pop bx
+        pop ax
+        pop bp
+        ret 4
+
+; SpawnMushroom(col, row) : free entity slot -> mushroom on top of the block
+SpawnMushroom:
+        push bp
+        mov bp, sp
+        push ax
+        push bx
+        push cx
+        xor bx, bx
+        mov cx, ENT_MAX
+.f:     cmp byte [ents+bx+E_TYPE], 0
+        je near .got
+        add bx, ENT_SIZE
+        dec cx
+        jnz near .f
+        jmp near .o
+.got:   mov byte [ents+bx+E_TYPE], 3
+        mov byte [ents+bx+E_STATE], 1
+        mov ax, [bp+6]
+        shl ax, 4
+        mov [ents+bx+E_X], ax
+        mov ax, [bp+4]
+        shl ax, 4
+        mov [ents+bx+E_Y], ax
+        mov byte [ents+bx+E_DIR], 1
+        mov byte [ents+bx+E_FRAC], 0
+        mov byte [ents+bx+E_TMR], 0
+.o:     pop cx
+        pop bx
+        pop ax
+        pop bp
+        ret 4
+
+; TouchTiles : coins and the flag pole, sampled over Mario's hitbox
+TouchTiles:
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        call GetHeight
+        mov di, ax
+        mov bx, 2                   
+.xl:    mov si, 1                   
+        mov cx, di
+        shr cx, 3
+        inc cx
+.yl:    mov ax, [mx_int]
+        add ax, bx
+        mov [tpx], ax
+        mov dx, [my_int]
+        sub dx, si
+        mov [tpy], dx
+        push ax
+        push dx
+        call GetTile
+        cmp ax, 11
+        jne near .nc
+        push word [tpx]
+        push word [tpy]
+        push word 0
+        call SetTile
+        call CollectCoin
+        jmp near .nx
+.nc:    cmp ax, 12
+        jne near .nx
+        mov byte [pole_hit], 1
+.nx:    cmp si, 1
+        jne near .n1
+        mov si, 8
+        jmp near .n2
+.n1:    add si, 8
+.n2:    dec cx
+        jnz near .yl
+        cmp bx, 13
+        je near .done
+        mov bx, 13
+        jmp near .xl
+.done:  pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        ret
