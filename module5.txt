@@ -1,0 +1,63 @@
+; module05_framebuffer.inc - Module 5: frame buffer and block operations
+; Procedures: AllocFrameBuffer, ClearFrame, FlipFrame
+
+AllocFrameBuffer:                  
+        push ax
+        mov ax, cs
+        add ax, 1000h
+        cmp ax, VIDEO_SEG - 0FA0h
+        ja near .fail
+        mov [fbseg], ax
+        mov [drawseg], ax
+        clc
+        pop ax
+        ret
+.fail:  stc
+        pop ax
+        ret
+
+ClearFrame:                        
+        push bp
+        mov bp, sp
+        push ax
+        push cx
+        push di
+        push es
+        mov ax, [drawseg]
+        mov es, ax
+        mov al, [bp+4]
+        mov ah, al
+        xor di, di
+        mov cx, 32000
+        cld
+        rep stosw
+        pop es
+        pop di
+        pop cx
+        pop ax
+        pop bp
+        ret 2
+
+FlipFrame:                          
+        push ax
+        push cx
+        push si
+        push di
+        push ds
+        push es
+        mov ax, [fbseg]
+        mov ds, ax
+        mov ax, VIDEO_SEG
+        mov es, ax
+        xor si, si
+        xor di, di
+        mov cx, 32000
+        cld
+        rep movsw
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop cx
+        pop ax
+        ret
