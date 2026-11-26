@@ -1,0 +1,287 @@
+; module04_sprites.inc - Module 4: sprites
+; Procedures: InitSprites, DrawSpriteRow, DrawSprite
+
+InitSprites:
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        push es
+        push ds
+        pop es
+        cld
+        mov si, spr_start
+        mov dx, spr_end - spr_start
+.n:
+        lodsb
+        mov di, spr_chars
+        mov cx, SPR_NCHARS
+        repne scasb
+        jne near .t
+        mov ax, SPR_NCHARS-1
+        sub ax, cx
+        mov bx, ax
+        mov al, [spr_cols+bx]
+        jmp near .st
+.t:     xor al, al
+.st:    mov [si-1], al
+        dec dx
+        jnz near .n
+        pop es
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        ret
+
+; Inputs : [bp+10]=x [bp+8]=y [bp+6]=pointer to 16 bytes [bp+4]=flags
+DrawSpriteRow:
+        push bp
+        mov bp, sp
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        push es
+        mov ax, [bp+8]
+        cmp ax, SCREEN_H            ; unsigned: also rejects negative y
+        jae near .out
+        mov dx, ax
+        shl ax, 8
+        shl dx, 6
+        add ax, dx
+        mov [rowoff], ax            ; rowoff = y*320
+        mov ax, [drawseg]
+        mov es, ax
+        mov si, [bp+6]
+        xor cx, cx                  ; column 0..15
+.col:
+        mov dx, cx
+        test word [bp+4], F_MIRROR
+        jz near .nm
+        mov dx, 15
+        sub dx, cx                  ; mirrored: read the row backwards
+.nm:    mov bx, si
+        add bx, dx
+        mov al, [bx]
+        test al, al                 ; 0 = transparent
+        jz near .skip
+        mov di, [bp+10]
+        add di, cx
+        cmp di, SCREEN_W            ; unsigned: rejects off-screen left/right
+        jae near .skip
+        add di, [rowoff]
+        mov [es:di], al
+.skip:  inc cx
+        cmp cx, 16
+        jb near .col
+.out:
+        pop es
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        pop bp
+        ret 8
+
+DrawSprite:
+        push bp
+        mov bp, sp
+        push ax
+        push cx
+        push dx
+        push si
+        mov si, [bp+6]
+        mov dx, [bp+8]
+        mov cx, 16
+.row:
+        push word [bp+10]
+        push dx
+        push si
+        push word [bp+4]
+        call DrawSpriteRow
+        test word [bp+4], F_STRETCH
+        jz near .one
+        inc dx
+        push word [bp+10]
+        push dx
+        push si
+        push word [bp+4]
+        call DrawSpriteRow
+.one:   inc dx
+        add si, 16
+        dec cx
+        jnz near .row
+        pop si
+        pop dx
+        pop cx
+        pop ax
+        pop bp
+        ret 8
+
+; sprite data
+spr_chars:  db '.KRBSNYWG'
+spr_cols:   db 0, COL_BLACK, COL_RED, COL_BLUE, 12, COL_BROWN, COL_YELLOW, COL_WHITE, COL_GREEN
+
+spr_start:
+spr_mario_stand:
+        db '....RRRRR.......'
+        db '...RRRRRRRRR....'
+        db '...NNNSSNS......'
+        db '..NSNSSSNSSS....'
+        db '..NSNNSSSNSSS...'
+        db '..NNSSSSNNNN....'
+        db '....SSSSSSS.....'
+        db '...RRBRRRR......'
+        db '..RRRBRRBRRR....'
+        db '.RRRRBBBBRRRR...'
+        db '.SSRBYBBYBRSS...'
+        db '.SSSBBBBBBSSS...'
+        db '.SSBBBBBBBBSS...'
+        db '...BBB..BBB.....'
+        db '..NNN....NNN....'
+        db '.NNNN....NNNN...'
+spr_mario_run:
+        db '....RRRRR.......'
+        db '...RRRRRRRRR....'
+        db '...NNNSSNS......'
+        db '..NSNSSSNSSS....'
+        db '..NSNNSSSNSSS...'
+        db '..NNSSSSNNNN....'
+        db '....SSSSSSS.....'
+        db '...RRBRRRR......'
+        db '..RRRBRRBRRR....'
+        db '.RRRRBBBBRRRR...'
+        db '.SSRBYBBYBRSS...'
+        db '.SSSBBBBBBSSS...'
+        db '.SSBBBBBBBBSS...'
+        db '..BBBB...BBB....'
+        db '.NNNN.....NNN...'
+        db 'NNNN........NNN.'
+spr_mario_jump:
+        db '....RRRRR.......'
+        db '...RRRRRRRRR....'
+        db '...NNNSSNS......'
+        db '..NSNSSSNSSS....'
+        db '..NSNNSSSNSSS...'
+        db '..NNSSSSNNNN....'
+        db '....SSSSSSS.....'
+        db '...RRBRRRR..SS..'
+        db '..RRRBRRBRRRSS..'
+        db '.RRRRBBBBRRRR...'
+        db '.SSRBYBBYBRSS...'
+        db '..SSBBBBBBSS....'
+        db '...BBBBBBBBBB...'
+        db '..BBBB....BBBNN.'
+        db '.NNN........NNN.'
+        db '.NN..........NN.'
+spr_goomba:
+        db '......KKKK......'
+        db '....KNNNNNNK....'
+        db '...KNNNNNNNNK...'
+        db '..KNNNNNNNNNNK..'
+        db '..KNWWNNNNWWNK..'
+        db '.KNWKWNNNNWKWNK.'
+        db '.KNNKKNNNNKKNNK.'
+        db '.KNNNNNNNNNNNNK.'
+        db '..KNNNNNNNNNNK..'
+        db '...KKYYYYYYKK...'
+        db '...KYYYYYYYYK...'
+        db '...KYYYYYYYYK...'
+        db '..KKKYYYYYYKKK..'
+        db '.KKKKKYYYYKKKKK.'
+        db '.KKKK......KKKK.'
+        db '..KK........KK..'
+spr_goomba_flat:
+        db '................'
+        db '................'
+        db '................'
+        db '................'
+        db '................'
+        db '................'
+        db '................'
+        db '................'
+        db '................'
+        db '................'
+        db '....KKKKKKKK....'
+        db '..KKNNNNNNNNKK..'
+        db '.KNNWKNNNNKWNNK.'
+        db '.KNNNNNNNNNNNNK.'
+        db '.KKYYYYYYYYYYKK.'
+        db '..KKKKKKKKKKKK..'
+spr_koopa:
+        db '......GGG.......'
+        db '.....GGGGG......'
+        db '.....GWKGG......'
+        db '.....GGGGG......'
+        db '......YYY.......'
+        db '.....YYYYY......'
+        db '....GGGGGGG.....'
+        db '...GGWWGGWWG....'
+        db '..GGWWWGGWWWG...'
+        db '..GGGGGGGGGGG...'
+        db '..GGWWGGGWWGG...'
+        db '...GGGGGGGGG....'
+        db '....YYY.YYY.....'
+        db '...YYYY.YYYY....'
+        db '...KKK...KKK....'
+        db '..KKKK...KKKK...'
+spr_shell:
+        db '................'
+        db '................'
+        db '................'
+        db '................'
+        db '................'
+        db '....GGGGGGGG....'
+        db '...GGWWGGWWGG...'
+        db '..GGWWWGGWWWGG..'
+        db '..GGGGGGGGGGGG..'
+        db '..GGWWGGGGWWGG..'
+        db '..GGGGGGGGGGGG..'
+        db '..KGGGGGGGGGGK..'
+        db '..KYYYYYYYYYYK..'
+        db '...KKKKKKKKKK...'
+        db '................'
+        db '................'
+spr_mushroom:
+        db '................'
+        db '................'
+        db '................'
+        db '................'
+        db '.....RRRRRR.....'
+        db '...RRRRWWRRRR...'
+        db '..RWWWRRRRWWWR..'
+        db '.RRWWWWRRRRWWWR.'
+        db 'RRRWWWRRRRRRWWRR'
+        db 'RRRRRRRRRRRRRRRR'
+        db '.KKKWWWWWWWWKKK.'
+        db '..KWWKWWWWKWWK..'
+        db '..KWWKWWWWKWWK..'
+        db '..KWWWWWWWWWWK..'
+        db '...KWWWWWWWWK...'
+        db '....KKKKKKKK....'
+spr_coin:
+        db '................'
+        db '................'
+        db '......KKKK......'
+        db '....KKYYYYKK....'
+        db '...KYYYYYYYYK...'
+        db '..KYYYYNYYYYYK..'
+        db '..KYYYYNYYYYYK..'
+        db '..KYYYYNYYYYYK..'
+        db '..KYYYYNYYYYYK..'
+        db '..KYYYYNYYYYYK..'
+        db '..KYYYYNYYYYYK..'
+        db '...KYYYYYYYYK...'
+        db '....KKYYYYKK....'
+        db '......KKKK......'
+        db '................'
+        db '................'
