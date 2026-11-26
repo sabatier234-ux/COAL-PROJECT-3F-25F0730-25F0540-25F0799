@@ -1,0 +1,219 @@
+; module03_map.inc - Module 3: level map and tile drawing
+
+InitMap:
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        push es
+        push ds
+        pop es
+        cld
+        mov si, map_src
+        mov bx, level_orig
+        mov dx, MAP_SIZE
+.next:
+        lodsb
+        mov di, charset
+        mov cx, CHARSET_LEN
+        repne scasb
+        jne near .sky
+        mov ax, CHARSET_LEN-1      
+        sub ax, cx
+        jmp near .store
+.sky:   xor ax, ax
+.store: mov [bx], al
+        inc bx
+        dec dx
+        jnz near .next
+        pop es
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        ret
+ResetMap:
+        push cx
+        push si
+        push di
+        push es
+        push ds
+        pop es
+        mov si, level_orig
+        mov di, level_work
+        mov cx, MAP_SIZE
+        cld
+        rep movsb
+        pop es
+        pop di
+        pop si
+        pop cx
+        ret
+
+GetTile:
+        push bp
+        mov bp, sp
+        push bx
+        push cx
+        mov ax, [bp+6]
+        shr ax, 4                   ; column
+        cmp ax, MAP_W
+        jae near .wall
+        mov bx, [bp+4]
+        shr bx, 4                   ; row
+        cmp bx, MAP_H
+        jae near .sky
+        mov cx, bx
+        shl bx, 6
+        shl cx, 2
+        sub bx, cx                  ; row*60
+        add bx, ax
+        mov al, [level_work+bx]
+        xor ah, ah
+        jmp near .out
+.wall:  mov ax, 1
+        jmp near .out
+.sky:   xor ax, ax
+.out:   pop cx
+        pop bx
+        pop bp
+        ret 4
+
+
+SetTile:
+        push bp
+        mov bp, sp
+        push ax
+        push bx
+        push cx
+        mov ax, [bp+8]
+        shr ax, 4
+        cmp ax, MAP_W
+        jae near .o
+        mov bx, [bp+6]
+        shr bx, 4
+        cmp bx, MAP_H
+        jae near .o
+        mov cx, bx
+        shl bx, 6
+        shl cx, 2
+        sub bx, cx
+        add bx, ax
+        mov al, [bp+4]
+        mov [level_work+bx], al
+.o:     pop cx
+        pop bx
+        pop ax
+        pop bp
+        ret 6
+
+
+IsSolid:
+        push bp
+        mov bp, sp
+        push word [bp+6]
+        push word [bp+4]
+        call GetTile
+        cmp ax, 1
+        jb near .no
+        cmp ax, 10
+        ja near .no
+        mov ax, 1
+        jmp near .o
+.no:    xor ax, ax
+.o:     pop bp
+        ret 4
+
+DrawTile:
+        push bp
+        mov bp, sp
+        push ax
+        push bx
+        mov bx, [bp+4]
+        mov al, [tile_colour+bx]
+        xor ah, ah
+        push word [bp+8]
+        push word [bp+6]
+        push word 16
+        push word 16
+        push ax
+        call FillRect
+        pop bx
+        pop ax
+        pop bp
+        ret 6
+
+
+DrawMap:
+        push bp
+        mov bp, sp
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        mov si, [bp+4]
+        shr si, 4                  
+        mov di, [bp+4]
+        and di, 15
+        neg di                     
+        mov cx, 21                  
+.col:
+        cmp si, MAP_W
+        jae near .done
+        xor dx, dx                 
+.row:
+        mov bx, dx
+        shl bx, 6
+        mov ax, dx
+        shl ax, 2
+        sub bx, ax
+        add bx, si                  
+        mov al, [level_work+bx]
+        test al, al
+        jz near .next
+        xor ah, ah
+        mov bx, dx
+        shl bx, 4                   
+        push di                    
+        push bx                    
+        push ax                     
+        call DrawTile
+.next:
+        inc dx
+        cmp dx, MAP_H
+        jb near .row
+        add di, 16
+        inc si
+        dec cx
+        jnz near .col
+.done:
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        pop bp
+        ret 2
+
+map_src:
+        db '..........','..........','..........','..........','..........','..........'     ; 0  HUD row
+        db '..........','..........','..........','..........','..........','..........'     ; 1
+        db '..........','..........','..........','..........','..........','.......','|','..' ; 2  pole top
+        db '..........','..........','..........','..........','..........','.......','|','..' ; 3
+        db '..........','..........','..........','..........','..........','.......','|','..' ; 4
+        db '..........','..........','..........','..........','..........','.......','|','..' ; 5
+        db '........','M','...','BBB','?','............','?','....','BBB','..........','M','?','.....','S','...|..'   
+        db '..........','..........','..','ccc','..........','.','[]','..','ccc','.........','SS','...|..'            
+        db '..........','........','ccc','.........','[]','....','()','.......','c','.....','SSS','...|..'           
+        db '..........','..........','..........','()','....','()','..........','..','SSSS','...','S','..'            
+        db 'GGGGGGGGGG','GGGGGGGGGG','GG','...','GGGGGGGGGG','GGGGG','...','GGGGGGGGGG','GGGGGGG'                    
+        db 'GGGGGGGGGG','GGGGGGGGGG','GG','...','GGGGGGGGGG','GGGGG','...','GGGGGGGGGG','GGGGGGG'                      
+        times MAP_SIZE-($-map_src) db 0       
+        times ($-map_src)-MAP_SIZE db 0
