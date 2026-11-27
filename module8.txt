@@ -1,0 +1,80 @@
+; module08_timer.inc - Module 8: timer and game clock
+TimerISR:
+        push ax
+        push ds
+        mov ax, cs
+        mov ds, ax
+        inc word [ticks]
+        pop ds
+        pop ax
+        iret
+
+InstallTimer:
+        push ax
+        push bx
+        push dx
+        push es
+        mov ax, 351Ch
+        int 21h
+        mov [old1c_off], bx
+        mov [old1c_seg], es
+        mov dx, TimerISR
+        mov ax, 251Ch
+        int 21h
+        pop es
+        pop dx
+        pop bx
+        pop ax
+        ret
+
+RestoreTimer:
+        push ax
+        push dx
+        push ds
+        mov dx, [old1c_off]
+        mov ax, [old1c_seg]
+        mov ds, ax
+        mov ax, 251Ch
+        int 21h
+        pop ds
+        pop dx
+        pop ax
+        ret
+
+WaitTick:                          
+        push ax
+.w:     mov ax, [ticks]
+        cmp ax, [last_tick]
+        jne near .go
+        hlt
+        jmp near .w
+.go:    mov [last_tick], ax
+        pop ax
+        ret
+
+ResyncClock:
+        push ax
+        mov ax, [ticks]
+        mov [clk_last], ax
+        mov word [clk_acc], 0
+        pop ax
+        ret
+
+UpdateClock:                       
+        push ax
+        push bx
+        mov ax, [ticks]
+        mov bx, ax
+        sub ax, [clk_last]
+        mov [clk_last], bx
+        add [clk_acc], ax
+.l:     cmp word [clk_acc], TICKS_PER_SEC
+        jb near .done
+        sub word [clk_acc], TICKS_PER_SEC
+        cmp word [time_left], 0
+        je near .l
+        dec word [time_left]
+        jmp near .l
+.done:  pop bx
+        pop ax
+        ret
