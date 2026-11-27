@@ -1,0 +1,25 @@
+; module06_camera.inc - Module 6: camera and scrolling (Section 5.3 update rule)
+; Procedure: UpdateCamera
+
+UpdateCamera:
+        push ax
+        mov ax, [mx_int]
+        sub ax, [camera_x]          
+        cmp ax, 160
+        jle near .lim               
+        mov ax, [mx_int]
+        sub ax, 160
+        cmp ax, MAX_CAM             
+        jle near .nc
+        mov ax, MAX_CAM
+.nc:    cmp ax, [camera_x]         
+        jle near .lim
+        mov [camera_x], ax
+.lim:   mov ax, [camera_x]          
+        cmp [mx_int], ax
+        jge near .o
+        mov [mx_int], ax
+        mov byte [mx_frac], 0
+        mov word [vx], 0
+.o:     pop ax
+        ret
