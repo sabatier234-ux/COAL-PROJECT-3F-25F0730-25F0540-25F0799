@@ -1,0 +1,111 @@
+; module09_physics.inc - Module 9: player movement and physics
+
+GetHeight:                          
+        mov ax, 16
+        cmp byte [form], 0
+        je near .s
+        mov ax, 32
+.s:     ret
+
+UpdateMario:
+        push ax
+        push dx
+        mov ax, [my_int]
+        mov [prev_feet], ax
+        mov word [maxv], WALK_MAX
+        cmp byte [keys+SC_LSHIFT], 0
+        je near .nm
+        mov word [maxv], RUN_MAX
+.nm:    mov al, [keys+SC_RIGHT]
+        mov ah, [keys+SC_LEFT]
+        cmp al, 0
+        je near .tryleft
+        cmp ah, 0
+        jne near .friction
+        mov byte [facing], 0
+        mov ax, [vx]
+        test ax, ax
+        js near .rb
+        add ax, ACC
+        jmp near .rc
+.rb:    add ax, BRAKE
+.rc:    cmp ax, [maxv]
+        jle near .rs
+        mov ax, [maxv]
+.rs:    mov [vx], ax
+        jmp near .horiz
+.tryleft:
+        cmp ah, 0
+        je near .friction
+        mov byte [facing], 1
+        mov ax, [vx]
+        test ax, ax
+        jg near .lb
+        sub ax, ACC
+        jmp near .lc
+.lb:    sub ax, BRAKE
+.lc:    mov dx, [maxv]
+        neg dx
+        cmp ax, dx
+        jge near .ls
+        mov ax, dx
+.ls:    mov [vx], ax
+        jmp near .horiz
+.friction:
+        mov ax, [vx]
+        test ax, ax
+        jz near .horiz
+        js near .fn
+        sub ax, FRIC
+        jns near .fs
+        xor ax, ax
+        jmp near .fs
+.fn:    add ax, FRIC
+        js near .fs
+        xor ax, ax
+.fs:    mov [vx], ax
+.horiz: mov ax, [vx]                
+        mov dl, [mx_frac]
+        add dl, al
+        mov [mx_frac], dl
+        mov al, ah
+        cbw
+        adc [mx_int], ax
+        call HorizCollide
+        push word SC_SPACE          
+        call KeyPressed
+        test al, al
+        jz near .nj
+        cmp byte [on_ground], 0
+        je near .nj
+        mov word [vy], JUMP_V
+.nj:    mov ax, [vy]                
+        test ax, ax
+        jns near .nv
+        cmp byte [keys+SC_SPACE], 0
+        jne near .nv
+        cmp ax, CUT_V
+        jge near .nv
+        mov word [vy], CUT_V
+.nv:    mov ax, [vy]                
+        add ax, GRAV
+        cmp ax, MAXFALL
+        jle near .gk
+        mov ax, MAXFALL
+.gk:    mov [vy], ax
+        mov ax, [vy]                
+        mov dl, [my_frac]
+        add dl, al
+        mov [my_frac], dl
+        mov al, ah
+        cbw
+        adc [my_int], ax
+        mov byte [on_ground], 0
+        cmp word [vy], 0
+        jl near .rise
+        call CheckFloor
+        jmp near .vd
+.rise:  call CheckCeiling
+.vd:    pop dx
+        pop ax
+        ret
