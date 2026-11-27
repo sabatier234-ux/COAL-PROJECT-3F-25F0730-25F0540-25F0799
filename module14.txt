@@ -1,0 +1,522 @@
+; module14_states.inc - Module 14: game states, screens and menus
+
+; ---- drawing the world ----
+DrawEntities:
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        xor si, si
+        mov di, ENT_MAX
+.l:     mov al, [ents+si+E_TYPE]
+        test al, al
+        jz near .n
+        mov bx, [ents+si+E_X]
+        sub bx, [camera_x]
+        cmp bx, -16
+        jle near .n
+        cmp bx, 320
+        jge near .n
+        mov dx, [ents+si+E_Y]
+        sub dx, 16
+        xor cx, cx
+        cmp al, 3
+        je near .mush
+        cmp al, 2
+        je near .koopa
+        mov ax, spr_goomba
+        cmp byte [ents+si+E_STATE], 2
+        jne near .gw
+        mov ax, spr_goomba_flat
+        jmp near .draw
+.gw:    test byte [frame], 8        ; walking animation
+        jz near .draw
+        mov cx, F_MIRROR
+        jmp near .draw
+.koopa: mov ax, spr_koopa
+        cmp byte [ents+si+E_STATE], 3
+        jb near .kw
+        mov ax, spr_shell
+        add dx, 2
+        jmp near .draw
+.kw:    cmp byte [ents+si+E_DIR], 0
+        je near .draw
+        mov cx, F_MIRROR
+        jmp near .draw
+.mush:  mov ax, spr_mushroom
+.draw:  push bx
+        push dx
+        push ax
+        push cx
+        call DrawSprite
+.n:     add si, ENT_SIZE
+        dec di
+        jnz near .l
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        ret
+
+DrawMario:
+        push ax
+        push bx
+        push cx
+        push dx
+        cmp byte [hide], 0
+        jne near .o
+        cmp word [invuln], 0
+        je near .vis
+        test word [frame], 2        ; blink: draw on alternate frames only
+        jnz near .o
+.vis:   call GetHeight
+        mov dx, [my_int]
+        sub dx, ax                  ; top y
+        mov bx, [mx_int]
+        sub bx, [camera_x]
+        xor cx, cx
+        cmp byte [facing], 0
+        je near .nf
+        or cx, F_MIRROR
+.nf:    cmp byte [form], 0
+        je near .ns
+        or cx, F_STRETCH
+.ns:    mov ax, spr_mario_jump
+        cmp byte [state], ST_DYING
+        je near .pose
+        cmp byte [state], ST_WIN
+        je near .pose
+        cmp byte [on_ground], 0
+        je near .pose
+        mov ax, spr_mario_stand
+        cmp word [vx], 0
+        je near .pose
+        test byte [mx_int], 8
+        jz near .pose
+        mov ax, spr_mario_run
+.pose:  push bx
+        push dx
+        push ax
+        push cx
+        call DrawSprite
+.o:     pop dx
+        pop cx
+        pop bx
+        pop ax
+        ret
+
+DrawWorld:                          ; clear, draw, flip, then the HUD text
+        push word COL_SKY
+        call ClearFrame
+        push word [camera_x]
+        call DrawMap
+        call DrawEntities
+        call DrawMario
+        call DrawHUD
+        call FlipFrame
+        call DrawHUDText
+        ret
+
+; ---- state machine helpers ----
+SetState:                           ; AL = new state
+        mov [state], al
+        mov byte [scr_dirty], 1
+        call ClearPressed
+        ret
+
+GoTitle:
+        mov byte [menu_sel], 0
+        mov al, ST_TITLE
+        call SetState
+        ret
+
+; ---- state handlers ----
+DoTitle:
+        cmp byte [scr_dirty], 0
+        je near .keys
+        call DrawTitle
+        call FlipFrame
+        call DrawTitleText
+        mov byte [scr_dirty], 0
+.keys:  push word SC_UP
+        call KeyPressed
+        test al, al
+        jz near .nu
+        mov byte [menu_sel], 0
+        mov byte [scr_dirty], 1
+.nu:    push word SC_DOWN
+        call KeyPressed
+        test al, al
+        jz near .nd
+        mov byte [menu_sel], 1
+        mov byte [scr_dirty], 1
+.nd:    push word SC_ESC
+        call KeyPressed
+        test al, al
+        jz near .ne
+        mov byte [state], ST_EXIT
+        ret
+.ne:    push word SC_ENTER
+        call KeyPressed
+        test al, al
+        jz near .o
+        cmp byte [menu_sel], 0
+        jne near .ex
+        call NewGame
+        mov al, ST_PLAYING
+        call SetState
+        ret
+.ex:    mov byte [state], ST_EXIT
+.o:     ret
+
+DoPlaying:
+        push word SC_P
+        call KeyPressed
+        test al, al
+        jz near .nop
+        mov al, ST_PAUSED
+        call SetState
+        ret
+.nop:   push word SC_ESC
+        call KeyPressed
+        test al, al
+        jz near .noesc
+        call GoTitle
+        ret
+.noesc: push word SC_T              ; debug key: clock = 5
+        call KeyPressed
+        test al, al
+        jz near .not
+        mov word [time_left], 5
+.not:   push word SC_C              ; debug key: coins = 99
+        call KeyPressed
+        test al, al
+        jz near .noc
+        mov word [coins], 99
+.noc:   call UpdateMario            
+        call UpdateEnemies
+        call ResolveEntities
+        call TouchTiles
+        call UpdateClock
+        cmp word [invuln], 0
+        je near .ni
+        dec word [invuln]
+.ni:    call CheckDeath
+        call UpdateCamera
+        call DrawWorld
+        ret
+
+DoPaused:
+        cmp byte [scr_dirty], 0
+        je near .k
+        call DrawPause
+        call FlipFrame
+        push word 17
+        push word 11
+        push word s_paused
+        push word COL_YELLOW
+        call DrawText
+        call DrawHUDText
+        mov byte [scr_dirty], 0
+.k:     push word SC_P
+        call KeyPressed
+        test al, al
+        jz near .e
+        call ResyncClock
+        mov al, ST_PLAYING
+        call SetState
+        ret
+.e:     push word SC_ESC
+        call KeyPressed
+        test al, al
+        jz near .o
+        call GoTitle
+.o:     ret
+
+DoLifeLost:
+        cmp byte [scr_dirty], 0
+        je near .t
+        push word COL_BLACK
+        call ClearFrame
+        push word 128
+        push word 96
+        push word spr_mario_stand
+        push word 0
+        call DrawSprite
+        call FlipFrame
+        push word 15
+        push word 9
+        push word s_world2
+        push word COL_WHITE
+        call DrawText
+        push word 19
+        push word 13
+        push word s_x
+        push word COL_WHITE
+        call DrawText
+        push word 20
+        push word 13
+        push word 0
+        push word [lives]
+        push word 2
+        push word COL_WHITE
+        call PrintNum
+        mov byte [scr_dirty], 0
+.t:     inc word [ltimer]
+        cmp word [ltimer], 36       ; about 2 seconds
+        jb near .o
+        call ResetLevel
+        mov al, ST_PLAYING
+        call SetState
+.o:     ret
+
+DoComplete:
+        cmp byte [scr_dirty], 0
+        je near .k
+        push word COL_BLACK
+        call ClearFrame
+        call FlipFrame
+        push word 13
+        push word 3
+        push word s_complete
+        push word COL_YELLOW
+        call DrawText
+        push word 9
+        push word 9
+        push word s_score
+        push word COL_YELLOW
+        call DrawText
+        push word 25
+        push word 9
+        push word [score_hi]
+        push word [score_lo]
+        push word 6
+        push word COL_WHITE
+        call PrintNum
+        push word 9
+        push word 11
+        push word s_coins
+        push word COL_YELLOW
+        call DrawText
+        push word 25
+        push word 11
+        push word 0
+        push word [coins]
+        push word 2
+        push word COL_WHITE
+        call PrintNum
+        push word 9
+        push word 13
+        push word s_timeleft
+        push word COL_YELLOW
+        call DrawText
+        push word 25
+        push word 13
+        push word 0
+        push word [bonus_time]
+        push word 3
+        push word COL_WHITE
+        call PrintNum
+        push word 9
+        push word 15
+        push word s_bonus
+        push word COL_YELLOW
+        call DrawText
+        mov ax, [bonus_time]
+        mov bx, 50
+        mul bx                      ; DX:AX = time left x 50
+        push word 25
+        push word 15
+        push dx
+        push ax
+        push word 5
+        push word COL_WHITE
+        call PrintNum
+        push word 15
+        push word 19
+        push word s_press
+        push word COL_WHITE
+        call DrawText
+        mov byte [scr_dirty], 0
+.k:     push word SC_ENTER
+        call KeyPressed
+        test al, al
+        jz near .o
+        call GoTitle
+.o:     ret
+
+DoGameOver:
+        cmp byte [scr_dirty], 0
+        je near .k
+        push word COL_BLACK
+        call ClearFrame
+        call FlipFrame
+        push word 15
+        push word 6
+        push word s_over
+        push word COL_RED
+        call DrawText
+        push word 14
+        push word 12
+        push word s_final
+        push word COL_YELLOW
+        call DrawText
+        push word 17
+        push word 14
+        push word [score_hi]
+        push word [score_lo]
+        push word 6
+        push word COL_WHITE
+        call PrintNum
+        push word 15
+        push word 18
+        push word s_press
+        push word COL_WHITE
+        call DrawText
+        mov byte [scr_dirty], 0
+.k:     push word SC_ENTER
+        call KeyPressed
+        test al, al
+        jz near .o
+        call GoTitle
+.o:     ret
+
+DrawPause:                          ; drawn over the frozen picture
+        push word 112
+        push word 84
+        push word 96
+        push word 32
+        push word COL_WHITE
+        call FillRect
+        push word 114
+        push word 86
+        push word 92
+        push word 28
+        push word COL_BLACK
+        call FillRect
+        ret
+
+DrawTitle:                         
+        push ax
+        push bx
+        push word COL_SKY
+        call ClearFrame
+        xor bx, bx
+.b1:    push bx                     ; brick border: top and bottom
+        push word 0
+        push word 2
+        call DrawTile
+        push bx
+        push word 176
+        push word 2
+        call DrawTile
+        add bx, 16
+        cmp bx, 320
+        jb near .b1
+        mov bx, 16
+.b2:    push word 0                 ; left and right
+        push bx
+        push word 2
+        call DrawTile
+        push word 304
+        push bx
+        push word 2
+        call DrawTile
+        add bx, 16
+        cmp bx, 176
+        jb near .b2
+        push word 16                ; ground strip
+        push word 160
+        push word 288
+        push word 3
+        push word COL_LGREEN
+        call FillRect
+        push word 16
+        push word 163
+        push word 288
+        push word 13
+        push word COL_BROWN
+        call FillRect
+        push word 40                ; Mario and a Goomba
+        push word 144
+        push word spr_mario_stand
+        push word 0
+        call DrawSprite
+        push word 264
+        push word 144
+        push word spr_goomba
+        push word 0
+        call DrawSprite
+        push word 62               
+        push word 30
+        push word 196
+        push word 100
+        push word COL_WHITE
+        call FillRect
+        push word 64
+        push word 32
+        push word 192
+        push word 96
+        push word COL_BLACK
+        call FillRect
+        push word 24                
+        push word 166
+        push word 272
+        push word 12
+        push word COL_BLACK
+        call FillRect
+        pop bx
+        pop ax
+        ret
+
+DrawTitleText:                     
+        push ax
+        push bx
+        push dx
+        push word 14
+        push word 5
+        push word s_title
+        push word COL_RED
+        call DrawText
+        push word 14
+        push word 7
+        push word s_engine
+        push word COL_WHITE
+        call DrawText
+        mov ax, COL_WHITE           ; colour of START GAME
+        mov bx, COL_WHITE           ; colour of EXIT
+        mov dx, 11                  ; row of the arrow
+        cmp byte [menu_sel], 0
+        jne near .sel1
+        mov ax, COL_YELLOW
+        jmp near .go
+.sel1:  mov bx, COL_YELLOW
+        mov dx, 13
+.go:    push word 12                ; arrow
+        push dx
+        push word s_arrow
+        push word COL_YELLOW
+        call DrawText
+        push word 14
+        push word 11
+        push word s_start
+        push ax
+        call DrawText
+        push word 14
+        push word 13
+        push word s_exit
+        push bx
+        call DrawText
+        push word 8
+        push word 21
+        push word s_team
+        push word COL_WHITE
+        call DrawText
+        pop dx
+        pop bx
+        pop ax
+        ret
