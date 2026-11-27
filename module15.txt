@@ -1,0 +1,182 @@
+; module15_winlose.inc - Module 15: win, lose, restart and clean exit
+
+
+ResetEnemies:
+        push cx
+        push si
+        push di
+        push es
+        push ds
+        pop es
+        mov si, ents_init
+        mov di, ents
+        mov cx, ENT_MAX*ENT_SIZE
+        cld
+        rep movsb
+        pop es
+        pop di
+        pop si
+        pop cx
+        ret
+
+ResetLevel:                         ; keeps score, coins, lives
+        call ResetMap
+        call ResetEnemies
+        mov word [mx_int], 32
+        mov byte [mx_frac], 0
+        mov word [my_int], 160
+        mov byte [my_frac], 0
+        mov word [vx], 0
+        mov word [vy], 0
+        mov byte [on_ground], 1
+        mov byte [facing], 0
+        mov byte [form], 0
+        mov byte [hp], 1
+        mov word [invuln], 0
+        mov byte [chain], 0
+        mov word [camera_x], 0
+        mov word [time_left], LEVEL_TIME
+        mov byte [pole_hit], 0
+        mov byte [hide], 0
+        call ResyncClock
+        call ClearPressed
+        ret
+
+NewGame:
+        mov word [score_lo], 0
+        mov word [score_hi], 0
+        mov word [coins], 0
+        mov word [lives], 3
+        call ResetLevel
+        ret
+
+StartDeath:                         ; die_pit = 1: no upward hop
+        cmp byte [state], ST_DYING
+        je near .o
+        mov byte [state], ST_DYING
+        mov word [dtimer], 0
+        mov word [vx], 0
+        cmp byte [die_pit], 0
+        jne near .o
+        mov word [vy], 0F7C3h       ; -8.2: rises about 50 pixels
+.o:     ret
+
+StartWin:                           ; flag touched: points by height of Mario's feet
+        push ax
+        push bx
+        mov ax, [my_int]
+        dec ax
+        shr ax, 4                   ; map row of the bottom edge
+        mov bx, 5000
+        cmp ax, 3
+        jbe near .a
+        mov bx, 2000
+        cmp ax, 4
+        je near .a
+        mov bx, 800
+        cmp ax, 5
+        je near .a
+        mov bx, 400
+        cmp ax, 7
+        jbe near .a
+        mov bx, 100
+.a:     push bx
+        call AddScore
+        mov byte [state], ST_WIN
+        mov word [wtimer], 0
+        mov byte [wphase], 0
+        mov word [vx], 0
+        mov word [vy], 0
+        mov word [mx_int], POLE_X-6
+        mov byte [mx_frac], 0
+        pop bx
+        pop ax
+        ret
+
+CheckDeath:                         ; pit, clock, flag pole
+        push ax
+        push bx
+        call GetHeight
+        mov bx, [my_int]
+        sub bx, ax
+        cmp bx, 192                 ; top of Mario below the bottom of the map
+        jl near .np
+        mov byte [die_pit], 1
+        call StartDeath
+        jmp near .o
+.np:    cmp word [time_left], 0
+        jne near .nt
+        mov byte [die_pit], 0
+        call StartDeath
+        jmp near .o
+.nt:    cmp byte [pole_hit], 0
+        je near .o
+        call StartWin
+.o:     pop bx
+        pop ax
+        ret
+
+DoDying:
+        inc word [dtimer]
+        mov ax, [vy]
+        add ax, GRAV
+        cmp ax, MAXFALL
+        jle near .g
+        mov ax, MAXFALL
+.g:     mov [vy], ax
+        mov ax, [vy]                ; falls with gravity, no collisions
+        mov dl, [my_frac]
+        add dl, al
+        mov [my_frac], dl
+        mov al, ah
+        cbw
+        adc [my_int], ax
+        call DrawWorld
+        cmp word [dtimer], 27
+        jb near .o
+        cmp word [my_int], 240
+        jl near .o
+        dec word [lives]
+        cmp word [lives], 0
+        je near .over
+        mov word [ltimer], 0
+        mov al, ST_LIFELOST
+        call SetState
+        ret
+.over:  mov al, ST_GAMEOVER
+        call SetState
+.o:     ret
+
+DoWin:
+        push ax
+        push bx
+        push dx
+        inc word [wtimer]
+        cmp byte [wphase], 0
+        jne near .p1
+        mov ax, [my_int]            ; slide down the pole
+        add ax, 3
+        cmp ax, BASE_FEET
+        jl near .st
+        mov ax, BASE_FEET
+        mov byte [wphase], 1
+        mov word [wtimer], 0
+.st:    mov [my_int], ax
+        jmp near .draw
+.p1:    mov byte [hide], 1          ; Mario disappears into the castle
+        cmp word [wtimer], 18
+        jb near .draw
+        mov ax, [time_left]
+        mov [bonus_time], ax
+        mov bx, 50
+        mul bx                      ; time left x 50
+        push ax
+        call AddScore
+        mov al, ST_COMPLETE
+        call SetState
+        jmp near .o
+.draw:  call DrawWorld
+.o:     pop dx
+        pop bx
+        pop ax
+        ret
