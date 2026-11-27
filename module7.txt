@@ -1,0 +1,95 @@
+; module07_keyboard.inc - Module 7: keyboard interrupt handler
+; Procedures: KbdISR, InstallKbd, RestoreKbd, KeyPressed, ClearPressed
+
+
+KbdISR:
+        push ax
+        push bx
+        push ds
+        mov ax, cs
+        mov ds, ax
+        in al, 60h
+        cmp al, 0E0h
+        je near .eoi
+        cmp al, 0E1h
+        je near .eoi
+        mov bl, al
+        and bl, 7Fh
+        xor bh, bh
+        test al, 80h
+        jnz near .rel
+        cmp byte [keys+bx], 0      
+        jne near .eoi
+        mov byte [keys+bx], 1
+        mov byte [pressed+bx], 1
+        jmp near .eoi
+.rel:   mov byte [keys+bx], 0
+.eoi:   mov al, 20h
+        out 20h, al                 
+        pop ds
+        pop bx
+        pop ax
+        iret
+
+InstallKbd:
+        push ax
+        push bx
+        push dx
+        push es
+        mov ax, 3509h
+        int 21h                     
+        mov [old09_off], bx
+        mov [old09_seg], es
+        mov dx, KbdISR
+        mov ax, 2509h
+        int 21h
+        pop es
+        pop dx
+        pop bx
+        pop ax
+        ret
+
+RestoreKbd:
+        push ax
+        push dx
+        push ds
+        mov dx, [old09_off]
+        mov ax, [old09_seg]
+        mov ds, ax
+        mov ax, 2509h
+        int 21h
+        pop ds
+        pop dx
+        pop ax
+        ret
+
+; KeyPressed(scancode) -> AL = 1 if newly pressed (and clears the flag)
+KeyPressed:
+        push bp
+        mov bp, sp
+        push bx
+        mov bx, [bp+4]
+        mov al, [pressed+bx]
+        mov byte [pressed+bx], 0
+        pop bx
+        pop bp
+        ret 2
+
+; ClearPressed : forget pending key presses
+ClearPressed:
+        push ax
+        push cx
+        push di
+        push es
+        push ds
+        pop es
+        mov di, pressed
+        mov cx, 64
+        xor ax, ax
+        cld
+        rep stosw
+        pop es
+        pop di
+        pop cx
+        pop ax
+        ret
