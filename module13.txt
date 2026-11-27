@@ -1,0 +1,278 @@
+; module13_score_hud.inc - Module 13: score, health, lives and HUD (includes text output)
+; Procedures: DrawText, PrintNum, AddScore, AddLife, AddCoin, CollectCoin,
+;             DrawHeart, DrawHUD, DrawHUDText
+; Text uses BIOS output and is drawn AFTER FlipFrame. Text cells are 8x8 pixels.
+
+; DrawText(col, row, ptr, colour) : zero-terminated string
+; Inputs : [bp+10]=col [bp+8]=row [bp+6]=ptr [bp+4]=colour
+DrawText:
+        push bp
+        mov bp, sp
+        push ax
+        push bx
+        push dx
+        push si
+        mov dh, [bp+8]              
+        mov dl, [bp+10]             
+        mov si, [bp+6]
+        mov bl, [bp+4]             
+        xor bh, bh                 
+        mov ah, 02h                
+        int 10h
+        cld
+.l:     lodsb
+        test al, al
+        jz near .d
+        mov ah, 0Eh                
+        int 10h
+        jmp near .l
+.d:     pop si
+        pop dx
+        pop bx
+        pop ax
+        pop bp
+        ret 8
+
+; PrintNum(col, row, hi, lo, digits, colour) : 32-bit value, zero padded.
+; Repeated division by 10, remainders pushed, then popped in reverse.
+PrintNum:
+        push bp
+        mov bp, sp
+        push ax
+        push bx
+        push cx
+        push dx
+        push si
+        push di
+        mov si, [bp+10]             ; high word
+        mov di, [bp+8]              ; low word
+        mov cx, [bp+6]              ; digits
+        mov bx, 10
+.d:     mov ax, si
+        xor dx, dx
+        div bx                      ; high word / 10
+        mov si, ax
+        mov ax, di
+        div bx                      ; (remainder:low word) / 10
+        mov di, ax
+        push dx                     ; remainder = one digit
+        dec cx
+        jnz near .d
+        mov dh, [bp+12]             ; row
+        mov dl, [bp+14]             ; column
+        mov si, [bp+4]              ; colour
+        xor bh, bh
+        mov ah, 02h
+        int 10h
+        mov cx, [bp+6]
+.p:     pop ax
+        add al, '0'
+        mov bx, si                  ; BL = colour, BH = 0
+        mov ah, 0Eh
+        int 10h
+        dec cx
+        jnz near .p
+        pop di
+        pop si
+        pop dx
+        pop cx
+        pop bx
+        pop ax
+        pop bp
+        ret 12
+
+; AddScore(points) : 32-bit ADD/ADC, clamped to 999999
+AddScore:
+        push bp
+        mov bp, sp
+        push ax
+        mov ax, [bp+4]
+        add [score_lo], ax
+        adc word [score_hi], 0
+        cmp word [score_hi], 0Fh
+        jb near .ok
+        ja near .clamp
+        cmp word [score_lo], 423Fh
+        jbe near .ok
+.clamp: mov word [score_hi], 0Fh
+        mov word [score_lo], 423Fh
+.ok:    pop ax
+        pop bp
+        ret 2
+
+AddLife:
+        cmp word [lives], 99
+        jae near .o
+        inc word [lives]
+.o:     ret
+
+AddCoin:                            ; coins +1, 100 coins = extra life
+        inc word [coins]
+        cmp word [coins], 100
+        jb near .o
+        mov word [coins], 0
+        call AddLife
+.o:     ret
+
+CollectCoin:                        ; +200 points and a coin
+        push word 200
+        call AddScore
+        call AddCoin
+        ret
+
+; DrawHeart(x, y, colour) : a small heart made of 5 rectangles (8 x 7 pixels)
+; Inputs: [bp+8]=x [bp+6]=y [bp+4]=colour
+DrawHeart:
+        push bp
+        mov bp, sp
+        push ax
+        push word [bp+8]            ; left bump
+        push word [bp+6]
+        push word 3
+        push word 2
+        push word [bp+4]
+        call FillRect
+        mov ax, [bp+8]
+        add ax, 5
+        push ax                     ; right bump
+        push word [bp+6]
+        push word 3
+        push word 2
+        push word [bp+4]
+        call FillRect
+        push word [bp+8]            ; wide middle
+        mov ax, [bp+6]
+        add ax, 2
+        push ax
+        push word 8
+        push word 3
+        push word [bp+4]
+        call FillRect
+        mov ax, [bp+8]
+        inc ax
+        push ax                     ; narrower row
+        mov ax, [bp+6]
+        add ax, 5
+        push ax
+        push word 6
+        push word 1
+        push word [bp+4]
+        call FillRect
+        mov ax, [bp+8]
+        add ax, 3
+        push ax                     ; tip
+        mov ax, [bp+6]
+        add ax, 6
+        push ax
+        push word 2
+        push word 1
+        push word [bp+4]
+        call FillRect
+        pop ax
+        pop bp
+        ret 6
+
+; DrawHUD : black strip and the two hearts, drawn into the frame buffer
+DrawHUD:
+        push ax
+        push word 0
+        push word 0
+        push word 320
+        push word 16
+        push word COL_BLACK
+        call FillRect
+        mov ax, COL_DGRAY           ; heart 1
+        cmp byte [hp], 1
+        jb near .h1
+        mov ax, COL_RED
+.h1:    push word 256
+        push word 9
+        push ax
+        call DrawHeart
+        mov ax, COL_DGRAY           ; heart 2
+        cmp byte [hp], 2
+        jb near .h2
+        mov ax, COL_RED
+.h2:    push word 268
+        push word 9
+        push ax
+        call DrawHeart
+        pop ax
+        ret
+
+; DrawHUDText : labels and numbers, drawn after FlipFrame
+DrawHUDText:
+        push word 0
+        push word 0
+        push word s_score
+        push word COL_YELLOW
+        call DrawText
+        push word 8
+        push word 0
+        push word s_coins
+        push word COL_YELLOW
+        call DrawText
+        push word 14
+        push word 0
+        push word s_world
+        push word COL_YELLOW
+        call DrawText
+        push word 20
+        push word 0
+        push word s_time
+        push word COL_YELLOW
+        call DrawText
+        push word 26
+        push word 0
+        push word s_lives
+        push word COL_YELLOW
+        call DrawText
+        push word 32
+        push word 0
+        push word s_health
+        push word COL_YELLOW
+        call DrawText
+        push word 14                ; 1-1
+        push word 1
+        push word s_w11
+        push word COL_WHITE
+        call DrawText
+        push word 0                 ; score, 6 digits
+        push word 1
+        push word [score_hi]
+        push word [score_lo]
+        push word 6
+        push word COL_WHITE
+        call PrintNum
+        push word 8                 ; coins: x + 2 digits
+        push word 1
+        push word s_x
+        push word COL_WHITE
+        call DrawText
+        push word 9
+        push word 1
+        push word 0
+        push word [coins]
+        push word 2
+        push word COL_WHITE
+        call PrintNum
+        push word 20                ; time, 3 digits
+        push word 1
+        push word 0
+        push word [time_left]
+        push word 3
+        push word COL_WHITE
+        call PrintNum
+        push word 26                ; lives: x + 2 digits
+        push word 1
+        push word s_x
+        push word COL_WHITE
+        call DrawText
+        push word 27
+        push word 1
+        push word 0
+        push word [lives]
+        push word 2
+        push word COL_WHITE
+        call PrintNum
+        ret
